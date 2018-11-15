@@ -83,7 +83,7 @@ static arm_uc_buffer_t arm_uc_hub_plain_key = {
 
 static arm_uc_mmContext_t manifestManagerContext = { 0 };
 arm_uc_mmContext_t *pManifestManagerContext = &manifestManagerContext;
-static manifest_firmware_info_t fwinfo = { 0 };
+manifest_firmware_info_t fwinfo = { 0 };
 
 // buffer to store a uri struct
 #define URI_STRING_LEN 256

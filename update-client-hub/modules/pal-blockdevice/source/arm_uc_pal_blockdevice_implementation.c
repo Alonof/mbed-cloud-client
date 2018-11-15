@@ -63,6 +63,9 @@
 #error Update client buffer must be divisible by the block page size
 #endif
 
+#include "update-client-manifest-types.h"
+
+extern manifest_firmware_info_t fwinfo;
 static ARM_UC_PAAL_UPDATE_SignalEvent_t pal_blockdevice_event_handler = NULL;
 static uint32_t pal_blockdevice_firmware_size = 0;
 static uint32_t pal_blockdevice_page_size = 0;
@@ -234,7 +237,7 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_Prepare(uint32_t slot_id,
         if (header_status.error == ERR_NONE) {
             /* find the size needed to erase. Header is stored contiguous with firmware */
             uint32_t erase_size = pal_blockdevice_round_up_to_sector(pal_blockdevice_hdr_size + \
-                                                                     details->size);
+                                                                     details->size + fwinfo.manifestSize);
 
             /* find address of slot */
             uint32_t slot_addr = ARM_UC_BLOCKDEVICE_INVALID_SIZE;
@@ -259,6 +262,20 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_Prepare(uint32_t slot_id,
                 status = arm_uc_blockdevice_program(buffer->ptr,
                                                     slot_addr,
                                                     pal_blockdevice_hdr_size);
+
+                if (status == ARM_UC_BLOCKDEVICE_SUCCESS) {
+                    //Write manifest after client header
+                    uint32_t manifest_size = pal_blockdevice_round_up_to_sector \
+                                            (fwinfo.manifestSize + sizeof(fwinfo.manifestSize));
+                    uint8_t manifest_buffer[manifest_size];
+                    memcpy(manifest_buffer, &fwinfo.manifestSize, sizeof(fwinfo.manifestSize));
+                    memcpy(manifest_buffer + sizeof(fwinfo.manifestSize), &fwinfo.manifestBuffer, \
+                                                    fwinfo.manifestSize);
+                    status = arm_uc_blockdevice_program(manifest_buffer, slot_addr +\
+                                                        pal_blockdevice_hdr_size, manifest_size);
+                    //update size of header with manifest size
+                    pal_blockdevice_hdr_size += manifest_size;
+                }
 
                 if (status == ARM_UC_BLOCKDEVICE_SUCCESS) {
                     /* set return code */
@@ -312,7 +329,8 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_Write(uint32_t slot_id,
         uint32_t slot_size = ARM_UC_BLOCKDEVICE_INVALID_SIZE;
         result = pal_blockdevice_get_slot_addr_size(slot_id, &slot_addr, &slot_size);
         uint32_t physical_address = slot_addr + pal_blockdevice_hdr_size + offset;
-
+        UC_PAAL_TRACE("ARM_UC_PAL_BlockDevice_Write physical_address: %" PRIX32,
+                      physical_address);
         /* check that we are not writing too much */
         uint32_t aligned_size = 0;
         if (pal_blockdevice_firmware_size < offset + buffer->size) {
@@ -412,8 +430,8 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_Read(uint32_t slot_id,
     arm_uc_error_t result = { .code = ERR_INVALID_PARAMETER };
 
     if (buffer && buffer->ptr) {
-        UC_PAAL_TRACE("ARM_UC_PAL_BlockDevice_Read: %" PRIX32 " %" PRIX32 " %" PRIX32,
-                      slot_id, offset, buffer->size);
+        UC_PAAL_TRACE("ARM_UC_PAL_BlockDevice_Read: %" PRIX32 " %" PRIX32 " %" PRIX32 " %" PRIX32,
+                      slot_id, offset, buffer->size, pal_blockdevice_hdr_size);
 
         /* find address of slot */
         uint32_t slot_addr = ARM_UC_BLOCKDEVICE_INVALID_SIZE;
