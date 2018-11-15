@@ -13,7 +13,7 @@
 //----------------------------------------------------------------------------
 
 #include "arm_uc_config.h"
-#if defined(ARM_UC_FEATURE_PAL_BLOCKDEVICE) && (ARM_UC_FEATURE_PAL_BLOCKDEVICE == 1)
+#if 1
 
 #define __STDC_FORMAT_MACROS
 
@@ -421,7 +421,7 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_Read(uint32_t slot_id,
         result = pal_blockdevice_get_slot_addr_size(slot_id,
                                                     &slot_addr,
                                                     &slot_size);
-        uint32_t physical_address = slot_addr + pal_blockdevice_hdr_size + offset;
+        uint32_t physical_address = slot_addr + pal_blockdevice_hdr_size + MBED_CONF_APP_APPLICATION_MANIFEST_PAGE_SIZE + offset;
         uint32_t read_size = pal_blockdevice_round_up_to_page(buffer->size);
         int32_t status = ARM_UC_BLOCKDEVICE_FAIL;
 
@@ -485,6 +485,7 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_Activate(uint32_t slot_id)
  *         either DONE or ERROR when complete.
  *         Returns ERR_INVALID_PARAMETER on reject, and no signal is sent.
  */
+extern uint8_t g_manifest[MBED_CONF_APP_APPLICATION_MANIFEST_PAGE_SIZE];
 arm_uc_error_t ARM_UC_PAL_BlockDevice_GetFirmwareDetails(
     uint32_t slot_id,
     arm_uc_firmware_details_t *details)
@@ -503,6 +504,12 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_GetFirmwareDetails(
         int status = arm_uc_blockdevice_read(buffer,
                                              slot_addr,
                                              pal_blockdevice_hdr_size);
+
+//Read Manifest
+    if (status == ARM_UC_BLOCKDEVICE_SUCCESS) {
+        memset(g_manifest, 0, MBED_CONF_APP_APPLICATION_MANIFEST_PAGE_SIZE);
+        int status = arm_uc_blockdevice_read(g_manifest, slot_addr + pal_blockdevice_hdr_size, MBED_CONF_APP_APPLICATION_MANIFEST_PAGE_SIZE);
+        }
 
         if (status == ARM_UC_BLOCKDEVICE_SUCCESS) {
             result = arm_uc_parse_external_header_v2(buffer, details);
