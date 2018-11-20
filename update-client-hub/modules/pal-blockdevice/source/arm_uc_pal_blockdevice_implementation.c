@@ -261,21 +261,41 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_Prepare(uint32_t slot_id,
                 /* write header */
                 status = arm_uc_blockdevice_program(buffer->ptr,
                                                     slot_addr,
-                                                    pal_blockdevice_hdr_size);
-
+                                                    pal_blockdevice_hdr_size);       
+#if 1
                 if (status == ARM_UC_BLOCKDEVICE_SUCCESS) {
+typedef union {
+    uint8_t buffer[0x200];
+    struct
+    {
+        uint32_t write_address; // Write address in IAP
+        uint32_t read_address;  //Read address of image from BlockDevice
+        uint32_t type;          //Type of image
+        uint32_t manifest_size; // D/L image manifest size
+        uint8_t manifest_buffer[0x200 -  4 * sizeof(uint32_t)];    //D/L umage manifest
+    }data;
+}image_manifest_st;
                     //Write manifest after client header
-                    uint32_t manifest_size = pal_blockdevice_round_up_to_sector \
-                                            (fwinfo.manifestSize + sizeof(fwinfo.manifestSize));
-                    uint8_t manifest_buffer[manifest_size];
-                    memcpy(manifest_buffer, &fwinfo.manifestSize, sizeof(fwinfo.manifestSize));
-                    memcpy(manifest_buffer + sizeof(fwinfo.manifestSize), &fwinfo.manifestBuffer, \
-                                                    fwinfo.manifestSize);
-                    status = arm_uc_blockdevice_program(manifest_buffer, slot_addr +\
-                                                        pal_blockdevice_hdr_size, manifest_size);
+                    image_manifest_st image_header;
+                    uint32_t header_size = pal_blockdevice_round_up_to_sector(sizeof(image_header));
+
+                    image_header.data.write_address =  APPLICATION_ADDR;
+                    image_header.data.read_address =  slot_addr + pal_blockdevice_hdr_size + header_size;
+                    image_header.data.manifest_size = fwinfo.manifestSize;
+                    memcpy(image_header.data.manifest_buffer, &fwinfo.manifestBuffer,\
+                            sizeof(fwinfo.manifestSize));
+                                        
+                    UC_PAAL_TRACE("Image Header Size - %" PRIX32 " Size on BD - %" PRIX32 " \
+                                  Address on BD - %" PRIX32, sizeof(image_header),\
+                                  header_size, slot_addr + pal_blockdevice_hdr_size);
+
+                    status = arm_uc_blockdevice_program(image_header.buffer, slot_addr +\
+                                                        pal_blockdevice_hdr_size,\
+                                                        header_size);
                     //update size of header with manifest size
-                    pal_blockdevice_hdr_size += manifest_size;
+                    pal_blockdevice_hdr_size += header_size;
                 }
+#endif                
 
                 if (status == ARM_UC_BLOCKDEVICE_SUCCESS) {
                     /* set return code */
