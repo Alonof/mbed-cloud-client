@@ -504,13 +504,13 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_GetFirmwareDetails(
         int status = arm_uc_blockdevice_read(buffer,
                                              slot_addr,
                                              pal_blockdevice_hdr_size);
-
 //Read Manifest
+#if 1
     if (status == ARM_UC_BLOCKDEVICE_SUCCESS) {
         memset(g_manifest, 0, MBED_CONF_APP_APPLICATION_MANIFEST_PAGE_SIZE);
         int status = arm_uc_blockdevice_read(g_manifest, slot_addr + pal_blockdevice_hdr_size, MBED_CONF_APP_APPLICATION_MANIFEST_PAGE_SIZE);
         }
-
+#endif
         if (status == ARM_UC_BLOCKDEVICE_SUCCESS) {
             result = arm_uc_parse_external_header_v2(buffer, details);
 

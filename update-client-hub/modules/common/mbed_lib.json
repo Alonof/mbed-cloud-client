@@ -7,7 +7,7 @@
         },
         "bootloader-details": {
             "help": "Location in memory where the bootloader information can be read.",
-            "value": "0"
+            "value": "0x1FFF0000"
         },
         "storage-address": {
             "help": "When using address based storage (FlashIAP, Block Device), this is the starting address.",
