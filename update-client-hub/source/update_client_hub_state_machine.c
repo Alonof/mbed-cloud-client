@@ -739,8 +739,9 @@ void ARM_UC_HUB_setState(arm_uc_hub_state_t new_state)
                 // Firmware activated, now reboot the system to apply the new image.
 #if defined(ARM_UC_PROFILE_MBED_CLIENT_LITE) && (ARM_UC_PROFILE_MBED_CLIENT_LITE == 1)
                 arm_uc_plat_reboot();
+            
 #else
-                pal_osReboot();
+            pal_osReboot();
 #endif
 
                 /* Reboot not implemented on this platform.

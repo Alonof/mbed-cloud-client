@@ -130,6 +130,12 @@ struct manifest_firmware_info_t {
     };
     uint32_t manifestSize;
     uint8_t  manifestBuffer[640];
+    uint32_t HashedDataOffset;
+    uint32_t HashedDataLength;
+    uint32_t Sigoffset;
+    uint32_t SigLength;
+    uint32_t applicationHashOffset;
+    uint32_t applicationHashSize;
 };
 typedef struct manifest_firmware_info_t manifest_firmware_info_t;
 

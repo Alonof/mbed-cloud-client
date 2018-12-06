@@ -232,12 +232,12 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_Prepare(uint32_t slot_id,
                       slot_id, details->size);
 
         /* encode firmware details in buffer */
-        arm_uc_error_t header_status = arm_uc_create_external_header_v2(details,
+        arm_uc_error_t header_status = arm_uc_create_internal_header_v2(details,
                                                                         buffer);
         if (header_status.error == ERR_NONE) {
             /* find the size needed to erase. Header is stored contiguous with firmware */
             uint32_t erase_size = pal_blockdevice_round_up_to_sector(pal_blockdevice_hdr_size + \
-                                                                     details->size + fwinfo.manifestSize);
+                                                                     details->size + 0x200);
 
             /* find address of slot */
             uint32_t slot_addr = ARM_UC_BLOCKDEVICE_INVALID_SIZE;
@@ -264,32 +264,51 @@ arm_uc_error_t ARM_UC_PAL_BlockDevice_Prepare(uint32_t slot_id,
                                                     pal_blockdevice_hdr_size);       
 #if 1
                 if (status == ARM_UC_BLOCKDEVICE_SUCCESS) {
-typedef union {
-    uint8_t buffer[0x200];
-    struct
-    {
-        uint32_t write_address; // Write address in IAP
-        uint32_t read_address;  //Read address of image from BlockDevice
+typedef struct {
+        uint32_t WriteAddress; // Write address in IAP - inlcude headers and manifest
+        uint32_t JumpAddress; // Jump Address to main app
+        uint64_t ImageSize;    // Image length
+        uint32_t ReadAddress;  //Read address of image from BlockDevice
         uint32_t type;          //Type of image
-        uint32_t manifest_size; // D/L image manifest size
-        uint8_t manifest_buffer[0x200 -  4 * sizeof(uint32_t)];    //D/L umage manifest
-    }data;
-}image_manifest_st;
-                    //Write manifest after client header
+        uint32_t HashedDataOffset;    //Hashed Data offset in manifest
+        uint32_t HashedDataLength;    //Hashed data length
+        uint32_t SigOffset;          //Sig Data offset in manifest
+        uint32_t SigLength;          //Sig Length
+        uint32_t applicationHashOffset; // Offset for binary payload hash from manifest        
+        uint32_t ManifestSize;      // D/L image manifest size
+        uint8_t  ManifestBuffer[0x1B0];    //D/L image manifest
+        uint32_t MagicWord; // Write address in IAP - Jump Address
+}__attribute__((packed)) image_manifest_st;
+                    //Write manifest after client header                    
                     image_manifest_st image_header;
+                    memset(&image_header, 0xff, sizeof(image_header));
                     uint32_t header_size = pal_blockdevice_round_up_to_sector(sizeof(image_header));
 
-                    image_header.data.write_address =  APPLICATION_ADDR;
-                    image_header.data.read_address =  slot_addr + pal_blockdevice_hdr_size + header_size;
-                    image_header.data.manifest_size = fwinfo.manifestSize;
-                    memcpy(image_header.data.manifest_buffer, &fwinfo.manifestBuffer,\
-                            sizeof(fwinfo.manifestSize));
-                                        
+                    image_header.WriteAddress =  HEADER_ADDR;
+                    image_header.JumpAddress =  APPLICATION_ADDR;
+                    image_header.ReadAddress =  slot_id;
+                    image_header.ManifestSize = fwinfo.manifestSize;
+                    image_header.HashedDataOffset = fwinfo.HashedDataOffset;
+                    image_header.HashedDataLength = fwinfo.HashedDataLength;
+                    image_header.SigOffset = fwinfo.Sigoffset;
+                    image_header.SigLength = fwinfo.SigLength;
+                    image_header.applicationHashOffset = fwinfo.applicationHashOffset;                    
+                    image_header.ImageSize = (uint64_t)fwinfo.size;
+                    image_header.MagicWord = 0xAAAAAAAA;
+                    memcpy(image_header.ManifestBuffer, fwinfo.manifestBuffer,\
+                            fwinfo.manifestSize);
+
                     UC_PAAL_TRACE("Image Header Size - %" PRIX32 " Size on BD - %" PRIX32 " \
                                   Address on BD - %" PRIX32, sizeof(image_header),\
                                   header_size, slot_addr + pal_blockdevice_hdr_size);
+                printf("------------\n\r[");
+                for(uint32_t i =0 ; i<sizeof(image_header); i++)
+                {
+                    printf("%02X", *((uint8_t*)&image_header + i));
+                }
+                printf("]\n\r ------------\n\r");
 
-                    status = arm_uc_blockdevice_program(image_header.buffer, slot_addr +\
+                    status = arm_uc_blockdevice_program((uint8_t*)&image_header, slot_addr +\
                                                         pal_blockdevice_hdr_size,\
                                                         header_size);
                     //update size of header with manifest size

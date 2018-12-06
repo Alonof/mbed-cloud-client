@@ -267,6 +267,40 @@ int ARM_UC_mmGetCertAndKeyTable(manifest_firmware_info_t *info, arm_uc_buffer_t 
     return rc;
 }
 
+
+static arm_uc_error_t GetManifestOffsets(struct arm_uc_mm_fw_context_t *ctx)
+{
+	const int32_t fieldIDs[] =
+			{ARM_UC_MM_DER_SIG_SIGNATURES,
+			ARM_UC_MM_DER_SIG_SIGNATURE,
+			ARM_UC_MM_DER_RESOURCE};
+	 arm_uc_buffer_t manifest = {ctx->info->manifestSize, ctx->info->manifestSize, ctx->info->manifestBuffer};
+
+	 //-----------Finding ECC signature-----------
+	 arm_uc_buffer_t fields, sigblock;
+	 int rc = ARM_UC_mmDERGetSignedResourceValues(&manifest, 1U, &fieldIDs[0], &fields);
+	 if (rc) return (arm_uc_error_t) {MFST_ERR_DER_FORMAT};
+	 // Get the specified signature block
+	 rc = ARM_UC_mmDERGetSequenceElement(&fields, 0, &sigblock);
+	 if (rc) return (arm_uc_error_t) {MFST_ERR_DER_FORMAT};
+	 // Load the specified signature out of the signature block
+	 arm_uc_buffer_t sig;
+	 rc = ARM_UC_mmDERParseTree(&arm_uc_mmSignatures[0], &sigblock, 1U, &fieldIDs[1], &sig);
+	 if (rc) return (arm_uc_error_t) {MFST_ERR_DER_FORMAT};
+	 ctx->info->Sigoffset = (uint32_t)(sig.ptr) - (uint32_t)manifest.ptr;
+	 ctx->info->SigLength = sig.size;
+
+	 //----------- HASHED data-----------
+	arm_uc_buffer_t Resource;
+	int32_t ret = ARM_UC_mmDERGetSignedResourceValues(&manifest, 1U, &fieldIDs[2], &Resource);
+	ctx->info->HashedDataOffset = (uint32_t)Resource.ptr - (uint32_t)manifest.ptr;
+	ctx->info->HashedDataLength = Resource.size;
+
+    //Payload Hash
+    ctx->info->applicationHashOffset = (uint32_t)ctx->info->hash.ptr - (uint32_t)manifest.ptr;    
+	return (arm_uc_error_t) {ERR_NONE};
+}
+
 arm_uc_error_t ARM_UC_mmFetchFirmwareInfoFSM(uint32_t event)
 {
     arm_uc_error_t err = {MFST_ERR_NONE};
@@ -323,7 +357,7 @@ arm_uc_error_t ARM_UC_mmFetchFirmwareInfoFSM(uint32_t event)
                 // Encryption not in use. Skip key, ID, and IV extraction.
                 rc = ARM_UC_mmGetImageRef(ctx->info, &fwBuf);
                 if (rc == 0) {
-                    ctx->state = ARM_UC_MM_FW_STATE_NOTIFY;
+                    ctx->state = ARM_UC_MM_FW_STATE_GET_MANIFEST_OFFSET;
                     err.code = MFST_ERR_NONE;
                 } else {
                     err.code = MFST_ERR_DER_FORMAT;
@@ -334,21 +368,21 @@ arm_uc_error_t ARM_UC_mmFetchFirmwareInfoFSM(uint32_t event)
             // local key ID & encrypted key
             rc = ARM_UC_mmGetLocalIDAndKey(ctx->info, &fwBuf);
             if (!rc) {
-                ctx->state = ARM_UC_MM_FW_STATE_NOTIFY;
+                ctx->state = ARM_UC_MM_FW_STATE_GET_MANIFEST_OFFSET;
                 err.code = MFST_ERR_NONE;
                 break;
             }
             // Certificate and encrypted key
             rc = ARM_UC_mmGetCertAndKey(ctx->info, &fwBuf);
             if (!rc) {
-                ctx->state = ARM_UC_MM_FW_STATE_NOTIFY;
+                ctx->state = ARM_UC_MM_FW_STATE_GET_MANIFEST_OFFSET;
                 err.code = MFST_ERR_NONE;
                 break;
             }
             // Certificate and key table reference
             rc = ARM_UC_mmGetCertAndKeyTable(ctx->info, &fwBuf);
             if (!rc) {
-                ctx->state = ARM_UC_MM_FW_STATE_NOTIFY;
+                ctx->state = ARM_UC_MM_FW_STATE_GET_MANIFEST_OFFSET;
                 err.code = MFST_ERR_NONE;
                 break;
             }
@@ -370,6 +404,13 @@ arm_uc_error_t ARM_UC_mmFetchFirmwareInfoFSM(uint32_t event)
             ctx->state = ARM_UC_MM_FW_STATE_DONE;
         }
         break;
+
+    case ARM_UC_MM_FW_STATE_GET_MANIFEST_OFFSET:
+        ctx->state = ARM_UC_MM_FW_STATE_NOTIFY;
+        GetManifestOffsets(ctx);
+
+        break;
+
     case ARM_UC_MM_FW_STATE_DONE:
         // NOTE: The outer FSM will send the "done" message.
         ctx->state = ARM_UC_MM_FW_STATE_IDLE;

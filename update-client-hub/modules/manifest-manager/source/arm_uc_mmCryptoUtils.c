@@ -298,24 +298,22 @@ enum arm_uc_mmCertificateFetchEvents {
 #if defined(ARM_UC_FEATURE_MANIFEST_PUBKEY) && (ARM_UC_FEATURE_MANIFEST_PUBKEY == 1)
 static arm_uc_error_t ARM_UC_mmValidateSignatureCert(arm_uc_buffer_t *buffer, arm_uc_buffer_t *ca, uint32_t sigIndex)
 {
+
     const int32_t fieldIDs[] = {ARM_UC_MM_DER_SIG_HASH, ARM_UC_MM_DER_SIG_SIGNATURES};
     arm_uc_buffer_t fields[ARRAY_SIZE(fieldIDs)];
 
     // Get the signature list
     int rc = ARM_UC_mmDERGetSignedResourceValues(buffer, ARRAY_SIZE(fieldIDs), fieldIDs, fields);
     if (rc) return (arm_uc_error_t) {MFST_ERR_DER_FORMAT};
-
     // Get the specified signature block
     arm_uc_buffer_t sigblock;
     rc = ARM_UC_mmDERGetSequenceElement(&fields[1], sigIndex, &sigblock);
     if (rc) return (arm_uc_error_t) {MFST_ERR_DER_FORMAT};
-
     // Load the specified signature out of the signature block
     arm_uc_buffer_t sig;
     const int32_t sigID = ARM_UC_MM_DER_SIG_SIGNATURE;
     rc = ARM_UC_mmDERParseTree(&arm_uc_mmSignatures[0], &sigblock, 1U, &sigID, &sig);
     if (rc) return (arm_uc_error_t) {MFST_ERR_DER_FORMAT};
-
     // Validate the signature
     return ARM_UC_verifyPkSignature(ca, &fields[0], &sig);
 }
